@@ -1,2 +1,2 @@
-/home/gg147/ECE-650/homework5-kit/sneaky_mod.o
+/home/gg147/ECE650/proj5/sneaky_mod.o
 
