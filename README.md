@@ -1,6 +1,6 @@
 # Linux_Rootkit
 
-**This project involves inserting a sneaky module in Linux and modify some system calls via hooking process table and overriding some functions while allowing user to interact with command terminal.**
+**This project involves inserting a sneaky module in Ubuntu 20.04 and modify some system calls via hooking process table and overriding some functions while allowing user to interact with command terminal.**
 
 It's functionalities involve: 
 
